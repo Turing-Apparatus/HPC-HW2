@@ -1,11 +1,104 @@
-/* Parallel sample sort
- */
+/* PARALLEL SAMPLE SORT
+*   Andrew Szymczak
+*   ajs855
+*/
+
 #include <stdio.h>
 #include <unistd.h>
 #include <mpi.h>
 #include <stdlib.h>
+#include <time.h>
+// #include <limits.h>
 
 #define COMM MPI_COMM_WORLD
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+
+void array_to_file(int, int*, char*);
+static int compare(const void*, const void*);
+
+
+
+int main( int argc, char *argv[])
+{
+    int rank, P, N, s, bin, i=0, j=0;
+    int *vec, *sample, *bucket;
+
+    MPI_Init(&argc,&argv);
+    MPI_Comm_size(COMM, &P);
+    MPI_Comm_rank(COMM, &rank);
+
+    N = (argc < 2)? 400 : atoi(argv[1]);                                // INPUT DEFAULTS
+    s = (argc < 3)? MAX(N/P,P) : atoi(argv[2]);                         // N=400, s=max(N/P,P)
+    if (N < 1 || P < 1 || s < 2 ) { MPI_Abort(COMM,1); }
+
+    vec     = calloc(N, sizeof(int));                                   // VECTOR TO BE SORTED
+    sample  = calloc(s, sizeof(int));                                   // RANDOM SAMPLE FROM vec
+    int split[P], scounts[P], sdispls[P];                               // splits AND Alltoallv ARGS
+    int rcounts[P], rdispls[P];
+
+    srand ((rank+1)*time(NULL));                                        // SEED
+    for (i = 0; i < N; i++) { vec[i] = rand(); }                        // INITIALIZE
+    qsort(vec, N, sizeof(int), compare);                                // SORT
+    for (i = 0; i < s; i++) { sample[i] = vec[i*N/s]; }                 // SAMPLE
+
+    if (rank == 0)
+    {
+        int *allsamps = calloc(s*P, sizeof(int));
+        MPI_Gather(sample, s, MPI_INT, allsamps, s, MPI_INT, 0, COMM);  // GATHER SAMPLES
+        qsort(allsamps, s*P, sizeof(int), compare);                     // SORT SAMPLES
+        for (i = 1; i < P; i++) { split[i-1] = allsamps[i*s]; }         // GET SPLITS
+        split[P-1] = RAND_MAX;
+        free(allsamps);
+    }
+    else { MPI_Gather(sample, s, MPI_INT, NULL, s, MPI_INT, 0, COMM); }
+
+    MPI_Bcast(split, P, MPI_INT, 0, COMM);                              // BCAST SPLITS
+    sdispls[0] = 0;
+    for (i = 0; i<N; i++)                                               // GET INDICES OF SPLITS
+    {
+        if (vec[i] > split[j])
+        {
+            scounts[j] = (j==0)? i : i-sdispls[j];
+            sdispls[++j] = i;
+        }
+    }
+    scounts[P-1] = N-sdispls[P-1];
+
+    MPI_Alltoall(scounts, 1, MPI_INT, rcounts, 1, MPI_INT, COMM);       // a2a ORDERED TRANSFER
+    rdispls[0] = 0;
+    for (i=1; i<P; i++) { rdispls[i] = rcounts[i-1] + rdispls[i-1]; }
+    bin = rcounts[P-1] + rdispls[P-1];
+    bucket = calloc(bin, sizeof(int));
+    MPI_Alltoallv(vec, scounts, sdispls, MPI_INT, bucket, rcounts, rdispls, MPI_INT, COMM);
+    qsort(bucket, bin, sizeof(int), compare);
+
+    char file[256];                                                     // WRITE TO FILE
+    snprintf(file, 256, "Output/output%d.txt", rank);
+    array_to_file(bin, bucket, file);
+
+    free(vec);
+    free(sample);
+    free(bucket);
+    MPI_Finalize();
+    return 0;
+}
+
+
+
+void array_to_file(int n, int *arr, char *file)
+{
+    FILE* fd = NULL;
+    fd = fopen(file,"w+");
+    int i;
+
+    if(fd == NULL) { printf("Error opening file \n"); }
+    else
+    {
+        for(i = 0; i < n; i++) { fprintf(fd, "%d\n", arr[i]); }
+        fclose(fd);
+    }
+}
+
 
 
 static int compare(const void *a, const void *b)
@@ -20,88 +113,3 @@ static int compare(const void *a, const void *b)
 
 
 
-int main( int argc, char *argv[])
-{
-    int rank, P, N, bin, i,j=0;
-    int *vec, *sample, *bucket;
-
-    MPI_Init(NULL, NULL);
-    MPI_Comm_size(COMM, &P);
-    MPI_Comm_rank(COMM, &rank);
-
-    N  =  (argc < 1)? 400 : atoi(argv[1]);                  // INPUT DEFAULTS
-    s = (argc < 2)? max(N/P,P) : atoi(argv[2]);             // N=400, s=max(N/P,P)
-    if (N < 1)
-    {
-        printf("Invalid argument\n");
-        MPI_Abort(COMM,1);
-    }
-
-    vec     = calloc(N, sizeof(int));                       // VECTOR TO BE SORTED
-    sample  = calloc(s, sizeof(int));                       // RANDOM SAMPLE FROM vec
-    int split[P], scounts[P], sdispls[P];
-    int rcounts[P], rdispls[P];
-
-    srand((unsigned int) (rank + 393919));                  // SEED
-    for (i = 0; i < N; ++i) { vec[i] = rand(); }            // INITIALIZE
-    qsort(vec, N, sizeof(int), compare);                    // SORT
-    for (i = 0; i < s; i++) { sample[i] = vec(i*N/s); }     // SAMPLE
-
-    if (rank == 0)
-    {
-        int *allsamps = calloc(s*P, sizeof(int));
-        MPI_Gather(sample, s, MPI_INT, allsamps, s, MPI_INT, 0, COMM);  // GATHER
-        qsort(allsamps, s*P, sizeof(int), compare);                     // SORT SAMPLES
-        for (i = 1; i < P; i++) { split[i] = allsamps[i*s - s/2] };     // GET SPLITS
-        split[P-1] = MAX_INT;
-    }
-    else { MPI_Gather(sample, s, MPI_INT, NULL, s, MPI_INT, 0, COMM); }
-
-    MPI_Bcast(split, P, MPI_INT, 0, COMM);                      // BCAST SPLITS
-    for (i = 0; i<N; i++)                                       // GET INDICES OF SPLITS
-    {
-        if (vec[i] > split[j])
-        {
-            scounts[j] = (j==0)? i : i-scounts[j-1];
-            sdispls[j++] = i;
-        }
-    }
-
-    MPI_Alltoall(scounts, 1, MPI_INT, rcounts, 1, MPI_INT, COMM);
-    MPI_Alltoall(sdispls, 1, MPI_INT, rdispls, 1, MPI_INT, COMM);
-    bin = rcounts[length(rcounts)-1] + rdispls[length(rdispls)-1];
-    bucket = calloc(bin, sizeof(int))
-    MPI_Alltoallv(vec, scounts, sdispls, MPI_INT, bucket, rcounts, rdispls, MPI_INT, COMM);
-    qsort(bucket, bin, sizeof(int), compare);
-
-
-
-    /* randomly sample s entries from vector or select local splitters,
-     * i.e., every N/P-th entry of the sorted vector */
-
-    /* every processor communicates the selected entries
-     * to the root processor; use for instance an MPI_Gather */
-
-    /* root processor does a sort, determinates splitters that
-     * split the data into P buckets of approximately the same size */
-
-    /* root process broadcasts splitters */
-
-    /* every processor uses the obtained splitters to decide
-     * which integers need to be sent to which other processor (local bins) */
-
-    /* send and receive: either you use MPI_AlltoallV, or
-     * (and that might be easier), use an MPI_Alltoall to share
-     * with every processor how many integers it should expect,
-     * and then use MPI_Send and MPI_Recv to exchange the data */
-
-    /* do a local sort */
-
-    /* every processor writes its result to a file */
-
-    free(vec);
-    free(sample);
-    free(bucket);
-    MPI_Finalize();
-    return 0;
-}
