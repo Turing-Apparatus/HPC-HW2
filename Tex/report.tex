@@ -1,0 +1,273 @@
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{qtree}
+\usepackage{tikz}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{mathtools}
+\usepackage{changepage}
+\usepackage{setspace}
+\usepackage{pifont}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{color}
+\usepackage{listings}
+\geometry{a4paper}
+\usetikzlibrary{arrows}
+\lstset{ %
+frame=single           % adds a frame around the code
+}
+
+
+
+\let\b\textbf                                               % BOLD TEXT
+\let\i\textit                                               % ITALIC TEXT
+\let\fnt\footnotesize
+\let\s\scriptsize                                           % SMALL TEXT
+\let\implies\Rightarrow                                     % IMPLIES SYMBOL
+\let\t\text                                                 % TEXT IN MATH ENVIRONMENT
+\let\l\left                                                 % BEGIN (,{,[,|,...
+\let\r\right                                                % END ),},],|,...
+\let\p\partial                                              % CURLY d SYMBOL
+\let\del\nabla                                              % del OPERATOR
+\let\bs\boldsymbol                                          % BOLD SYMBOLS
+\let\ds\displaystyle                                        % \[ \] FORMATTING IN $ $
+\let\mc\mathcal
+\let\ig\includegraphics
+\let\teq\triangleq
+\let\mc\mathcal
+\let\ms\mathscr
+\let\mf\mathfrak
+\let\mb\mathbb
+\let\tt\texttt                                              % MONOSPACED TEXT
+\let\mtt\mathtt
+
+
+\newcommand{\aw}[1]{\begin{adjustwidth}{{#1}em}{{#1}em}}    % BEGIN adjustwidth {leftpad}{rightpad}
+\newcommand{\eaw}{\end{adjustwidth}}                        % END adjustwidth
+\newcommand{\bc}{\begin{center}}                            % BEGIN center
+\newcommand{\ec}{\end{center}}                              % END center
+\newcommand{\tab}{$\;\;\;\;$}                               % TAB HACK
+\newcommand{\nl}{$\;$\\}                                    % NEW LINE HACK
+\newcommand{\sfrac}[2]{{}^{#1}\!\! / \!{}_{#2}}                   % SMALL SLANTED FRACTION
+\newcommand{\unit}[1]{\bs{\hat{{#1}}}}                      % UNIT VECTOR
+\newcommand{\pdx}[3]{\frac{\p^{#1} {#2}}{\p {#3}^{#1}}}     % PARTIAL DERIVATIVE FRACTION
+\newcommand{\tpdx}[3]{\tfrac{\p^{#1} {#2}}{\p {#3}^{#1}}}   % TINY \pdx
+\newcommand{\ddx}[3]{\frac{d^{#1} {#2}}{d {#3}^{#1}}}       % DERIVATIVE FRACTION
+\newcommand{\cross}{\! \times \!}                           % \! SMALLER SPACED CROSS
+\newcommand{\dive}[1]{\del \! \cdot \! {#1}}                % DIVERGENCE
+\newcommand{\curl}[1]{\del \cross {#1}}                     % CURL
+\newcommand{\f}[2]{\frac{#1}{#2}}                           % FRAC SHORTCUT
+
+
+
+\title{HW2 - High Performance Computing\\}
+\author{Andrew Szymczak, ajs855\\ March, 2015\\ }
+\date{}
+\begin{document}
+\maketitle
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\nl \nl \nl
+
+\aw{2}
+\b{GitHub Repository \\}
+\eaw
+    \aw{4}
+    \begin{itemize}
+            \item \texttt{https://github.com/Turing-Apparatus/HPC-HW2.git}
+    \end{itemize}
+    \nl \nl
+    \eaw
+
+
+\aw{2}
+\b{Organization \\}
+\eaw
+    \aw{4}
+    The \tt{c} code and the report pdf are in the root directory. The tex code for the report is
+    in the Tex/ folder and any images used are under Tex/Images/. Output from \tt{ssort} is put
+    into the Output/ folder.
+    \nl \nl
+    \eaw
+
+
+\aw{2}
+\b{Commands \\}
+\eaw
+    \aw{4}
+    \begin{tabular}{lll}
+        \tt{make} & compile \tt{output*.c} and \tt{ssort.c} \\
+        \tt{make clean} & remove all executables, tex garbage, and ssort output. \\
+        \tt{make runsolved (NP) (EXT)} & run \tt{mpi\_solved(EXT)} with (NP) processors. NP \\
+            &defaults to 4 and EXT defaults to 1 if ommitted. \\ & For example
+            \tt{runsolved EXT=2} will execute \\ & \tt{mpirun -np 4 ./mpi\_solved2} \\
+        \tt{make runssort (NP) (N) (S)} & shortcut for \tt{mpirun -np NP ./ssort N S}. NP \\
+            & defaults to 4. N and S are as defined in the HW.
+    \end{tabular}
+    \nl \nl
+    \eaw
+
+\newpage
+
+
+\aw{2}
+\subsection*{1. Finding MPI Bugs\\}
+\eaw
+
+    \aw{4}
+    \begin{enumerate}
+
+        \item   The \tt{tag} parameter was wrong.
+        \item   Datatype mismatch from sender to receiver (\tt{MPI\_INT} to \tt{MPI\_FLOAT}).
+        \item   Missing \tt{MPI\_Init} at the beginning and \tt{MPI\_Finalize} at the end.
+        \item   \tt{MASTER} is missing the \tt{reduce} operation.
+        \item   The timings start off fast and then jump to slow. This is due to the asynchronous
+                nature of message passing. When process 0 performs the send operation, it will
+                either be blocked until the message is copied by the reciever or by the
+                the system buffer (if the buffer exists and is not full). In the latter case,
+                control will resume before the message is received and Wtime will be called nearly
+                instantly. The simplest fix is to use synchronous \tt{MPI\_Ssend}. Also, the
+                datatype parameter should probably be \tt{MPI\_CHAR} rather than
+                control will resume before the message is received and Wtime will be called nearly
+                instantly. This explaines the jump in timings. The simplest fix is to use
+                synchronous \tt{MPI\_Ssend}. Also, the datatype parameter should probably be
+                \tt{MPI\_CHAR} rather than \tt{MPI\_BYTE}.
+        \item   Process 2 should not call \tt{MPI\_Waitall} because it does not perform any
+                non-blocking operations. Also, \tt{OFFSET} should be initialized to 0 for all
+                processes. Fixing these, the code will run, but there is still a danger. We are
+                doing a non-blocking send/recieve in a loop, overwriting the message buffer in
+                each iteration. Generally it is safer to call an \tt{MPI\_Wait} in each loop
+                iteration or alternatively promote the buffer to an iterable. Since we don't care
+                about / don't process the message in any way, it doesn't matter for this code.
+        \item   \tt{count} should be a constant 1. \\
+
+    \end{enumerate}
+
+    You can run the code in two ways. Ommiting \$(NP) defaults it to 4. \\
+    \bc
+    \begin{tabular}{l}
+        \tt{make runsolved NP=4 EXT=2} \\
+        \tt{mpirun -np 4 ./mpi\_solved2} \\
+    \end{tabular}
+    \ec
+
+\newpage
+
+
+\eaw
+\aw{2}
+\subsection*{2. Sample Sort\\}
+\eaw
+
+    \aw{4}
+    I seed the time by \tt{srand ((rank+1)*time(NULL))}. This isn't truly random since it
+    oversamples, but it's good enough. To choose each sample set, I sort and then pick $s$
+    equispaced points. I use \tt{MPI\_Gather} to send all the sample sets to $root$, which sorts
+    and then broadcasts the $P$ equispaced splits. Each process then counts the number of elements
+    in each split (\tt{scounts}) as well as positions (\tt{sdispls}). I use an \tt{MPI\_Alltoall}
+    to send \tt{scounts[i]} from processors $j$ into \tt{rcounts[j]} in processor $i$ over all
+    $i,j$. Then each processor sets up their bucket by computing positions \tt{rdispls} directly
+    from \tt{rcounts}. Then they pass their data via an \tt{MPI\_Alltoallv} and then sort and
+    write to a file. Command line arguments are $N$ the number of elements per processor and $s$
+    the size of each sample set. You can run the code in two ways. Ommitting \$(NP) defaults it
+    to 4. \\ \nl
+    \bc
+    \begin{tabular}{l}
+        \tt{make runssort NP=64 N=100000 S=1000} \\
+        \tt{mpirun -np 64 ./ssort 100000 1000} \\
+    \end{tabular}
+    \ec
+    \eaw
+
+\newpage
+
+\aw{2}
+\b{Distributed memory parallel Jacobi smoother. Use MPI to write a parallel version of the Jacobi smoother from Homework 0 \\}
+\eaw
+
+\aw{4}
+\begin{itemize}
+    \item The first and last element of $\bs{u}^{(i)}$ are the shared indices. First we pass
+        the previous values $u^{(i)}_{-2} \rightarrow u^{(i+1)}_0$ for all $i<p\!-\!1$.
+            Then we perform the Jacobi iteration. Then we pass the new values
+            $u^{(i)}_1 \rightarrow u^{(i-1)}_{-1}$ for all $i>0$.
+    \item I use an $\texttt{MPI\_Allreduce}$ to calculate the residual on every processor.
+        Since this is an expensive process, I only do it once every 100 iterations.
+    \item Since my machine only utilizes four processors, my first scaling test was for
+        $p=1,2,3,4$. Let $I$ denote the number of iterations, and $t$ the total time in seconds.
+                \[
+                    \begin{array}{|c|c|c|c|c|}
+                        \hline
+                        N & I & p & \left| Au - f \right| & t \\ \hline
+                        2520 & 5000000 & 1 & 0.932 & 54.62 \\
+                        2520 & 5000000 & 2 & 0.932 & 28.26 \\
+                        2520 & 5000000 & 3 & 0.932 & 22.08 \\
+                        2520 & 5000000 & 4 & 0.932 & 20.12 \\ \hline
+                    \end{array}
+                \]
+        Note how the residual is independent of $p$, as expected. Each processor handles 2
+        messages and $N/p\,$ of the Jacobi work in each iteration. Assuming full connectivity
+        (so that all messages are done in parallel), we can expect $\mc{O}(\sfrac{N}{p})$ time
+        (as marked by the $\mathtt{X}$'s). The slowdown is due to the suboptimal parallelisation
+        and overhead of message passing.
+
+    \item My second scaling test only establishes the high overhead of message passing.
+        Increasing $p>4$ on my local machine effectively sequentializes crosstalk. Since there
+        are $2p-2$ messages passed in every iteration, we can expect the computation time to
+        grow $\sim p$.
+                \[
+                    \begin{array}{|c|c|c|c|c|}
+                        \hline
+                        N & I & p & \left| Au - f \right| & t \\ \hline
+                        1200 & 100000 & 20 & 22.24 & 10.40 \\
+                        1200 & 100000 & 40 & 22.24 & 21.83 \\
+                        1200 & 100000 & 60 & 22.24 & 33.17 \\
+                        1200 & 100000 & 80 & 22.24 & 48.06 \\
+                        1200 & 100000 & 100 & 22.24 & 63.77 \\ \hline
+                    \end{array}
+                \]
+    \item Gauss-Seidel would be more dificult to program because of the implicit dependence
+        in each iteration. We could try to do something analagous to the first bullet point:
+        First we pass the old values $u^{(i)}_{1} \rightarrow u^{(i-1)}_{-1}$ for all
+        $i<p\!-\!1$. Then we perform the Jacobi iteration. Then we pass the new values
+        $u^{(i)}_{-2} \rightarrow u^{(i+1)}_{0}$ for all $i<p\!-\!1$. The problem is that
+        you can't do this in parallel. Before $u^{(i)}$ can preform Jacobi, it must wait
+        to recieve the new value $u^{(i-1)}_{-2}$, which isn't sent until all lower rank
+        processes are complete. The process is essentially sequential, and even worse off
+        due to message passing.
+
+\end{itemize}
+\eaw
+
+\end{document}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

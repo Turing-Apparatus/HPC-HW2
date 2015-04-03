@@ -7,6 +7,7 @@ all: clean compile
 
 clean:
 	rm -f mpi_solved? ssort Output/output*
+	rm -f Tex/report.f* Tex/report.aux Tex/report.log Tex/report.s*
 
 compile:
 	$(COMPILER) $(FLAGS) mpi_solved1.c -o mpi_solved1
@@ -21,9 +22,7 @@ compile:
 
 runssort:
 	mpirun -np $(NP) ./ssort $(N) $(S)
-	# mpirun -np 4 ./ssort
 
 
 runsolved:
 	mpirun -np $(NP) ./mpi_solved$(EXT)
-
